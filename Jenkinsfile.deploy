@@ -1,0 +1,59 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_IMAGE = "docker.io/omarashraf3011/nginx-ci:${BUILD_NUMBER}"
+        ANSIBLE_PLAYBOOK = 'ansible/playbook.yml'
+    }
+    parameters {
+        string(name: 'EC2_IP', defaultValue: '', description: 'Public IP of EC2')
+    }
+    stages {
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    cat <<EOF > index.html
+<h1>Hello Konnecta team</h1>
+<p>This is Omar and this is the Deployment for Pipe 2!</p>
+<p>Build Number: ${BUILD_NUMBER}</p>
+<p>Date: $(date)</p>
+EOF
+                    docker build -t ${DOCKER_IMAGE} .
+                """
+            }
+        }
+        stage('Docker Login & Push') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', 
+                                                  usernameVariable: 'DOCKER_USER', 
+                                                  passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push ${DOCKER_IMAGE}
+                    """
+                }
+            }
+        }
+        stage('Deploy on EC2') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ssh-ansible',
+                                                   keyFileVariable: 'SSH_KEY_FILE',
+                                                   usernameVariable: 'SSH_USER')]) {
+                    sh """
+                        chmod 600 ${SSH_KEY_FILE}
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} \\
+                            "docker rm -f web || true && docker run -d --name web -p 80:80 ${DOCKER_IMAGE}"
+                        ssh ${SSH_USER}@${EC2_IP} "curl -I http://localhost"
+                    """
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Pipeline 2 completed successfully!'
+        }
+        failure {
+            echo 'Pipeline 2 failed. Check the console output for errors.'
+        }
+    }
+}

@@ -1,0 +1,31 @@
+---
+- name: Install Docker on EC2
+  hosts: all
+  become: yes
+  vars:
+    ansible_ssh_private_key_file: ~/Task7-keypair.pem
+    ansible_user: ubuntu
+  tasks:
+    - name: Update package cache and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Start and enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+
+    - name: Show Docker version
+      debug:
+        msg: "Docker version: {{ docker_version.stdout }}"

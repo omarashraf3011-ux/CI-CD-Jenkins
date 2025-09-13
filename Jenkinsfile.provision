@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+    environment {
+        TERRAFORM_DIR = 'terraform'
+        ANSIBLE_PLAYBOOK = 'ansible/playbook.yml'
+    }
+    stages {
+        stage('Terraform Init & Apply') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'Aws-access-key',
+                                                  usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                                  passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    sh """
+                        export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+                        export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+                        
+                        cd ${TERRAFORM_DIR}
+                        
+                        terraform init -backend-config="bucket=onlinebackend-task7" \
+                                       -backend-config="key=task7/terraform.tfstate" \
+                                       -backend-config="region=us-east-1" \
+                                       -backend-config="dynamodb_table=terraform-lock-table"
+                        
+                        terraform apply -auto-approve
+                    """
+                }
+            }
+        }
+        stage('Get EC2 IP') {
+            steps {
+                script {
+                    env.EC2_IP = sh(script: "cd ${TERRAFORM_DIR} && terraform output -raw public_ip", returnStdout: true).trim()
+                    echo "EC2 Public IP: ${env.EC2_IP}"
+                }
+            }
+        }
+        stage('Run Ansible Playbook') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ssh-ansible',
+                                                   keyFileVariable: 'SSH_KEY_FILE',
+                                                   usernameVariable: 'SSH_USER')]) {
+                    retry(3) { 
+                        timeout(time: 5, unit: 'MINUTES') { 
+                            sh """
+                                chmod 600 ${SSH_KEY_FILE}
+                                ansible-playbook -i ${EC2_IP}, ${ANSIBLE_PLAYBOOK} -u ${SSH_USER} --private-key ${SSH_KEY_FILE} -o StrictHostKeyChecking=no
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Pipeline 1 completed successfully!'
+        }
+        failure {
+            echo 'Pipeline 1 failed. Check the console output for errors.'
+        }
+    }
+}

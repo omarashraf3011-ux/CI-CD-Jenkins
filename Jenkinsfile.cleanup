@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+    environment {
+        AWS_CREDENTIALS_ID = 'Aws-access-key'  
+        REGION = 'us-east-1'                   
+        TAG_KEY = 'lifespan'
+        TAG_VALUE = 'ephemeral'
+    }
+    stages {
+        stage('Cleanup EC2 Instances') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
+                                  credentialsId: "${AWS_CREDENTIALS_ID}"]]) {
+                    script {
+                        def instances = sh(
+                            script: """aws ec2 describe-instances \\
+                                --region ${REGION} \\
+                                --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" "Name=instance-state-name,Values=pending,running,stopping,stopped" \\
+                                --query "Reservations[].Instances[].InstanceId" --output text""",
+                            returnStdout: true
+                        ).trim()
+
+                        if (instances) {
+                            echo "Found instances: ${instances}"
+                            sh "aws ec2 terminate-instances --region ${REGION} --instance-ids ${instances}"
+                            echo "Terminated instances: ${instances}"
+                        } else {
+                            echo "No ephemeral instances found."
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Pipeline 3 (Daily Cleanup) completed successfully!'
+        }
+        failure {
+            echo 'Pipeline 3 failed. Check console output for errors.'
+        }
+    }
+}
