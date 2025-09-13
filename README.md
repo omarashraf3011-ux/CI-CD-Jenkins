@@ -67,7 +67,7 @@ It has been a **fantastic learning experience**, and I’m proud of the progress
 Thank you again, **Konecta**, for this amazing opportunity, and special thanks to **Eng. Moatz** for your guidance and support.  
 
 ---
+**Thank you, Konecta & Eng Moatz, for this unforgettable learning experience!**
 
 ### 🌟 With gratitude,  
-
-                     Omar Ashraf
+         Omar Ashraf
